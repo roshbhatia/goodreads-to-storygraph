@@ -1,57 +1,57 @@
-# Multi-stage Dockerfile for book-sync application
-# Stage 1: Builder - prepare dependencies with UV
+# UV-based Docker image for book-sync application
+# Following https://docs.astral.sh/uv/guides/integration/docker/
+
+# Stage 1: Builder - install UV and compile dependencies
 FROM python:3.11-slim AS builder
 
-WORKDIR /tmp/build
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Install UV
-RUN pip install --no-cache-dir uv>=0.1.0
+WORKDIR /app
 
-# Copy pyproject.toml
-COPY pyproject.toml .
+# Install dependencies only (separate layer for caching)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --no-editable
 
-# Generate lockfile
-RUN uv pip compile pyproject.toml -o requirements.txt
+# Copy source and sync project
+COPY . /app
 
-# Stage 2: Runtime - minimal production image
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable
+
+# Stage 2: Runtime - minimal image with Chrome
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for Chromium and application
+# Install Chromium and dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium-browser \
+    chromium \
     chromium-driver \
+    ca-certificates \
+    fonts-liberation \
     libxss1 \
     libnss3 \
-    libgconf-2-4 \
-    libappindicator3-1 \
-    libindicator7 \
     libxkbcommon0 \
-    libxdamage1 \
-    fonts-liberation \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
 RUN useradd -m -u 1000 sync-user && chown -R sync-user:sync-user /app
 
-# Copy requirements from builder
-COPY --from=builder /tmp/build/requirements.txt .
+# Copy virtual environment from builder (non-editable, no source code)
+COPY --from=builder --chown=sync-user:sync-user /app/.venv /app/.venv
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
+# Copy only the application script (source code not needed since installed non-editable)
 COPY --chown=sync-user:sync-user book_sync.py .
 COPY --chown=sync-user:sync-user config.json .
 
+# Activate virtual environment
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+
 # Switch to non-root user
 USER sync-user
-
-# Set environment variables for headless Chrome
-ENV CHROMIUM_BIN=/usr/bin/chromium-browser
-ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
 # Entrypoint
 ENTRYPOINT ["python", "book_sync.py"]
