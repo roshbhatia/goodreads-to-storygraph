@@ -515,19 +515,31 @@ class BookSyncAutomation:
 
 if __name__ == "__main__":
     try:
-        # Load configuration
-        config_path = 'config.json'
-        if not os.path.exists(config_path):
-            logging.error(f"Config file not found at {config_path}")
-            raise FileNotFoundError(f"Config file not found at {config_path}")
-            
-        with open(config_path) as f:
-            config = json.load(f)
+        # Load configuration from environment variables first, then fall back to config.json
+        config = {
+            'goodreads_user_id': os.getenv('GOODREADS_USER_ID'),
+            'storygraph_email': os.getenv('STORYGRAPH_EMAIL'),
+            'storygraph_password': os.getenv('STORYGRAPH_PASSWORD')
+        }
+        
+        # If env vars not set, try loading from config.json
+        if not all(config.values()):
+            config_path = 'config.json'
+            if os.path.exists(config_path):
+                with open(config_path) as f:
+                    file_config = json.load(f)
+                    # Merge with env vars (env vars take precedence)
+                    for key in config:
+                        if config[key] is None:
+                            config[key] = file_config.get(key)
+            else:
+                logging.error(f"Config file not found at {config_path} and environment variables not set")
+                raise FileNotFoundError(f"Config file not found at {config_path} and environment variables not set")
         
         required_keys = ['goodreads_user_id', 'storygraph_email', 'storygraph_password']
-        missing_keys = [key for key in required_keys if key not in config]
+        missing_keys = [key for key in required_keys if not config.get(key)]
         if missing_keys:
-            raise KeyError(f"Missing required config keys: {', '.join(missing_keys)}")
+            raise KeyError(f"Missing required config keys (set via env vars or config.json): {', '.join(missing_keys)}")
         
         # Create sync bot instance
         sync_bot = BookSyncAutomation(

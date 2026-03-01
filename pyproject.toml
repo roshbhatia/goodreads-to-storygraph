@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goodreads-to-storygraph"
+version = "1.0.0"
+description = "Automated sync of recently read books from Goodreads to StoryGraph"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Roshan Bhatia"}
+]
+dependencies = [
+    "selenium==4.16.0",
+    "requests==2.31.0",
+    "beautifulsoup4==4.12.3",
+    "lxml==5.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "uv>=0.1.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "uv>=0.1.0",
+]
